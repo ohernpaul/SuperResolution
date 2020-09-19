@@ -4,10 +4,8 @@ Created on Fri Aug 28 21:14:13 2020
 
 @author: Bah
 """
-import numpy as np
 import matplotlib.pyplot as plt
 import os
-import torch
 from skimage import transform
 
 
@@ -19,7 +17,6 @@ g_100_imgs = os.listdir(general_100_path)
 
 #get a single image
 temp_img = plt.imread(general_100_path + g_100_imgs[0])
-
 
 plt.imshow(temp_img)
 
