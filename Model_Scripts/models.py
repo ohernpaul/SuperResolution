@@ -51,18 +51,33 @@ class Basic_DRC(nn.Module):
         
         return h_d1
     
-class Advanced_DRC(nn.Module):
+class Block(nn.Module):
+    def __init__(self, n_channels, kernel_size, filter_size, stride, final_kernel=None):
+        if not final_kernel:
+            final_kernel = kernel_size
+            
+        super().__init__()
+        self.block = nn.Sequential(nn.Conv2d(n_channels, filter_size, kernel_size = kernel_size, stride=stride, padding=kernel_size[0]//2),
+                                       nn.ReLU(),
+                                       nn.Conv2d(filter_size, filter_size, kernel_size = final_kernel, stride=stride, padding=kernel_size[0]//2),
+                                       nn.ReLU()
+                                       )
     
-    class Block(nn.Module):
-        def __init__(self, n_channels, kernel_size, filter_size, stride):
-            self.block = nn.Sequential(nn.Conv2d(n_channels, filter_size, kernel_size = kernel_size, stride=stride, padding=kernel_size[0]//2),
-                                           nn.ReLU(),
-                                           nn.Conv2d(filter_size, filter_size, kernel_size = kernel_size, stride=stride, padding=kernel_size[0]//2),
-                                           nn.ReLU()
-                                           )
-        
-        def forward(self, x):
-            return self.block(x)
+    def forward(self, x):
+        return self.block(x)
+    
+class ConvLayer(nn.Module):
+    def __init__(self, n_channels, kernel_size, filter_size, stride):
+            
+        super().__init__()
+        self.block = nn.Sequential(nn.Conv2d(n_channels, filter_size, kernel_size = kernel_size, stride=stride, padding=kernel_size[0]//2),
+                                       nn.ReLU()
+                                       )
+    
+    def forward(self, x):
+        return self.block(x)
+    
+class Advanced_DRC(nn.Module):
     
     def __init__(self, n_recursions, n_channels, filter_size=256, kernel_size=(3,3), stride=(1,1), do_init=True):
         super(Advanced_DRC, self).__init__()
@@ -74,25 +89,20 @@ class Advanced_DRC(nn.Module):
         self.n_recursions = n_recursions
         self.n_channels = n_channels
         
-        self.embed_net = self.Block(n_channels, kernel_size, filter_size, stride)
+        self.embed_net = Block(n_channels, kernel_size, filter_size, stride)
         
-        self.inference_net = self.Block(filter_size, kernel_size, filter_size, stride)
+        self.inference_net = ConvLayer(filter_size, kernel_size, filter_size, stride)
         
-        self.recon_net = self.Block(filter_size, kernel_size, filter_size, stride)
+        self.recon_net = Block(filter_size, kernel_size, n_channels, stride)
+        
+        self.sum = ConvLayer(self.n_recursions * n_channels, (1,1), n_channels, stride)
         
         #init_weights
         if do_init:
             self.embed_net.apply(initWeights)
             self.recon_net.apply(initWeights)
         
-        
-        #use nn.init.kaiming_normal_ (He Normal) on all params in each sequential
-        self.embed_net.apply(initWeights)
-        self.recon_net.apply(initWeights)
-        
         self.avg_out = nn.Conv2d(self.n_recursions * n_channels, n_channels, kernel_size = (1,1), stride=stride)
-        
-        
         
         
     def forward(self, x):
@@ -114,13 +124,8 @@ class Advanced_DRC(nn.Module):
                 #t_out = 
                 #outs = torch.cat((outs, t_out.unsqueeze(0)), axis=1)
                 outs = torch.cat((outs, self.recon_net(self.inference_net(inf_out)) + identity), axis=1)
-            
-        
-        #each output image is summed at the end
-        out = outs.reshape(int(outs.shape[1]/self.n_channels), outs.shape[0], self.n_channels, outs.shape[-1], outs.shape[-1]).mean(axis=0)
-        #print(out.shape)
-        
-        #out = self.avg_out(outs)
+                
+        out = self.sum(outs)
             
         return out, outs.reshape(int(outs.shape[1]/self.n_channels), outs.shape[0], self.n_channels, outs.shape[-1], outs.shape[-1])
 
@@ -166,11 +171,19 @@ def advancedLoss(out, rec_out, labels, alpha):
     #might not need to add decay to loss since opt already implements it on theta
     l1 = nn.L1Loss(reduction='mean')
     l2 = nn.MSELoss()
-
-    tl1 = l1(labels.unsqueeze(0), rec_out)
+    
+    #get params norm for regularization loss
+    
+    tl1 = l1(labels, rec_out[0])
+    for i in range(1, len(rec_out)):
+        tl1 += l1(labels, rec_out[i])
+        
+    tl1 /= len(rec_out)
+    
     tl2 = l2(labels, out)
     
     final_loss = (alpha * tl1) + ((1-alpha)*tl2)
+
 
     return final_loss
 
@@ -179,12 +192,18 @@ def advancedLoss_Norm(out, rec_out, labels, alpha, beta, model):
     l1 = nn.L1Loss(reduction='mean')
     l2 = nn.MSELoss()
     
+    #get params norm for regularization loss
     norm = 0
     for n, w in model.named_parameters():
         if 'weight' in n:
             norm += torch.norm(w, 1)
     
-    tl1 = l1(labels.unsqueeze(0), rec_out)
+    tl1 = l1(labels, rec_out[0])
+    for i in range(1, len(rec_out)):
+        tl1 += l1(labels, rec_out[i])
+        
+    tl1 /= len(rec_out)
+    
     tl2 = l2(labels, out)
     
     final_loss = (alpha * tl1) + ((1-alpha)*tl2) + beta*norm

@@ -24,7 +24,7 @@ def do_test():
     
     test_base_200 = 'Z:/SuperResolution/Labeled_Tiled_Datasets_Fix/BSDS200\Scale_3/'
     
-    model_type = 'Skip_SRCNN'
+    model_type = 'Skip_SRCNN_NoAugs'
     
     out_base = 'Z:\SuperResolution\Outputs\\' + model_type + '\\' 
     model_base = 'Z:\SuperResolution\\Models\\' + model_type + '\\' 
@@ -36,18 +36,24 @@ def do_test():
     #===================
     epochs = 500
     batch_size = 64
-    workers = 0
+    workers = 4
     
     force_test = False
     test_output = 10
     #==================
     
+    # train_trans = transforms.Compose([
+    #                                   transforms.RandomHorizontalFlip(),
+    #                                   transforms.RandomVerticalFlip(),
+    #                                   #transforms.RandomRotation(90),
+    #                                   transforms.ToTensor(),
+    #                                 ])
+    
     train_trans = transforms.Compose([
-                                      #transforms.ToPILImage(),
-                                      #transforms.ToTensor(),
-                                      transforms.RandomHorizontalFlip(),
-                                      transforms.RandomVerticalFlip(),
-                                      transforms.RandomRotation(90),
+                                      #transforms.RandomHorizontalFlip(),
+                                      
+                                      #transforms.RandomVerticalFlip(),
+                                      #transforms.RandomRotation(90),
                                       transforms.ToTensor(),
                                     ])
         
@@ -67,12 +73,6 @@ def do_test():
     model = model.to(device)
     
     mse = nn.MSELoss()
-    
-    #SGD optimizer where each layer has their own weights
-    # opt = torch.optim.SGD(params=[{'params': model.conv1.parameters(), 'lr': 10e-4},
-    #                               {'params': model.conv2.parameters(), 'lr': 10e-4},
-    #                               {'params': model.conv3.parameters(), 'lr': 10e-5}],
-    #                       momentum=0.9)
     
     opt = torch.optim.Adam(params=[{'params': model.conv1.parameters(), 'lr': 1e-4},
                                   {'params': model.conv2.parameters(), 'lr': 1e-4},

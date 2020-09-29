@@ -13,7 +13,7 @@ from torchvision import transforms
 from torch.optim import lr_scheduler
 
 from models import Advanced_DRC, advancedLoss, advancedLoss_Norm
-from utils import ImageLabelDataset, cropCenter
+from utils import ImageLabelDataset, cropCenter, plotLosses, checkFolder
 
 def do_test():
 
@@ -25,9 +25,21 @@ def do_test():
     
     test_base_200 = 'Z:/SuperResolution/Labeled_Tiled_Datasets_Fix/BSDS100\Scale_3/'
     
+    model_type = 'DRC_Advanced_New'
+    
+    out_base = 'Z:\SuperResolution\Outputs\\' + model_type + '\\' 
+    model_base = 'Z:\SuperResolution\\Models\\' + model_type + '\\' 
+    
+    checkFolder(out_base)
+    checkFolder(model_base)
+    
         
-    #training online for a whole day    
-    batch_size = 32
+    #training online for a whole day  
+    #===================
+    force_test = False
+    test_output = 10
+    #===================
+    batch_size = 10
     epochs = 500
     momentum = 0.9
     decay = 0.0001
@@ -36,8 +48,16 @@ def do_test():
     alpha_step = 0.9
     
     workers = 4
+    #===================
+    
+    train_trans = transforms.Compose([
+                                      transforms.RandomHorizontalFlip(),
+                                      transforms.RandomVerticalFlip(),
+                                      transforms.RandomRotation(90),
+                                      transforms.ToTensor(),
+                                    ])
         
-    sr_dataset = ImageLabelDataset(sr_destination_base, transform=transforms.ToTensor(), resize=False)
+    sr_dataset = ImageLabelDataset(sr_destination_base, transform=train_trans, resize=False)
     
     sr_dataloader = DataLoader(sr_dataset, batch_size=batch_size,
                                shuffle=True, num_workers=workers, drop_last=True)
@@ -46,7 +66,7 @@ def do_test():
     
     test_dataloader_200 = DataLoader(test_dataset_200, batch_size=batch_size,
                                shuffle=False, num_workers=workers, drop_last=True)
-    
+    #==================
             
     model = Advanced_DRC(n_recursions = 16, n_channels = 3)
     model = model.to(device)
@@ -62,6 +82,7 @@ def do_test():
     
     sched = lr_scheduler.ReduceLROnPlateau(opt, 'min', factor=0.001, patience=5, min_lr=10e-6)
     
+    #==================
     avg_loss = 0
     avg_test_loss = 0
     
@@ -69,8 +90,7 @@ def do_test():
     test_loss_list = []
     test_psnr_list = []
     test_ssim_list = []
-    
-    epoch_imgs = []
+
     for e in range(epochs):
         #print("Train Epoch: " + str(e))
         for i, sample in tqdm(enumerate(sr_dataloader, 0), total=len(sr_dataloader)):
@@ -84,6 +104,7 @@ def do_test():
             out, rec_outs = model(x)
             
             loss = advancedLoss_Norm(out, rec_outs, y, alpha, decay, model)
+            #loss = advancedLoss(out, rec_outs, y, alpha)
             
             avg_loss += loss.item()
             
@@ -96,9 +117,11 @@ def do_test():
         avg_loss = 0
         avg_psnr = 0
         avg_ssim = 0
+        
+        #==================
     
         force_test = False
-        if e % 10 == 0 or force_test:
+        if e % test_output == 0 or force_test:
             with torch.no_grad():
                 print("Testing Epoch: " + str(e))
                 for i, sample in tqdm(enumerate(test_dataloader_200, 0), total=len(test_dataloader_200)):
@@ -151,29 +174,16 @@ def do_test():
                 ax[0].imshow(t_y)
                 ax[1].imshow(t_x)
                 ax[2].imshow(t_o)
-                
-                out_base = 'Z:\SuperResolution\Outputs\DRCNN_Rescaled_Norm\\'
+
                 nb_out = len(os.listdir(out_base))
                 fig.savefig(out_base + str(nb_out) + '.png', dpi=800)
                 
-                fig_l, ax_l = plt.subplots(4)
-                
-                ax_l[0].plot(train_loss_list, color='blue')
-                ax_l[0].set_title("Train Loss")
-                
-                ax_l[1].plot(test_loss_list, color='red')
-                ax_l[1].set_title("Test Loss")
-                
-                ax_l[2].plot(test_psnr_list)
-                ax_l[2].set_title("Test Avg PSNR")
-                
-                ax_l[3].plot(test_ssim_list)
-                ax_l[3].set_title("Test Avg SSIM")
-                
-                fig_l.tight_layout()
-                
-                out_base = 'Z:\SuperResolution\Outputs\DRCNN_Rescaled_Norm\\'
-                fig_l.savefig(out_base + "test_metrics" + '.png', dpi=800)
+                plotLosses(train_loss_list,
+                           test_loss_list,
+                           test_psnr_list,
+                           test_ssim_list,
+                           out_base
+                           )
             
         alpha *= alpha_step   
         
