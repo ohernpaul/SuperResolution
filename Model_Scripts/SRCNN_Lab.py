@@ -34,12 +34,24 @@ def do_test():
     
     #Hyper Params
     #===================
-    epochs = 400
-    batch_size = 16
-    workers = 6
+    epochs = 500
+    batch_size = 64
+    workers = 0
+    
+    force_test = False
+    test_output = 10
     #==================
+    
+    train_trans = transforms.Compose([
+                                      #transforms.ToPILImage(),
+                                      #transforms.ToTensor(),
+                                      transforms.RandomHorizontalFlip(),
+                                      transforms.RandomVerticalFlip(),
+                                      transforms.RandomRotation(90),
+                                      transforms.ToTensor(),
+                                    ])
         
-    sr_dataset = ImageLabelDataset(sr_destination_base, transform=transforms.ToTensor(), resize=False)
+    sr_dataset = ImageLabelDataset(sr_destination_base, transform=train_trans, resize=False)
     
     sr_dataloader = DataLoader(sr_dataset, batch_size=batch_size,
                                shuffle=True, num_workers=workers, drop_last=True)
@@ -68,9 +80,6 @@ def do_test():
     
     #==================
     
-    
-    
-    
     train_loss_list = []
     test_loss_list = []
     test_psnr_list = []
@@ -80,7 +89,7 @@ def do_test():
     
     epoch_imgs = []
     for e in range(epochs):
-        print("Train Epoch: " + str(e))
+        #print("Train Epoch: " + str(e))
         for i, sample in tqdm(enumerate(sr_dataloader, 0), total=len(sr_dataloader)):
             model.train()
             
@@ -110,8 +119,8 @@ def do_test():
         avg_loss = 0
     
     
-        force_test = False
-        if e % 10 == 0 or force_test:
+        
+        if e % test_output == 0 or force_test:
             print("Testing Epoch: " + str(e))
             for i, sample in tqdm(enumerate(test_dataloader_200, 0), total=len(test_dataloader_200)):
                 model.eval()
@@ -168,7 +177,8 @@ def do_test():
             plotLosses(train_loss_list,
                        test_loss_list,
                        test_psnr_list,
-                       test_ssim_list
+                       test_ssim_list,
+                       out_base
                        )
     
             torch.save(model.state_dict(), model_base + model_type +'.pt')

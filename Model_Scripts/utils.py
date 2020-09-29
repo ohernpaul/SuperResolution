@@ -50,14 +50,14 @@ class ImageLabelDataset(Dataset):
         
     def __getitem__(self, idx):
         #normalize RGB to 0-1
-        x = io.imread(self.x_dir + self.x_imgs[idx])/255
-        y = io.imread(self.y_dir + self.y_imgs[idx])/255
+        x = Image.open(self.x_dir + self.x_imgs[idx])
+        y = Image.open(self.y_dir + self.y_imgs[idx])
         
         if self.resize:
             #bi-cubic interpolation to target size if wasnt done in tile step
-            x = cv2.resize(x, dsize=(y.shape[0], y.shape[1]), interpolation=cv2.INTER_CUBIC)
+            x = x.resize((y.shape[0], y.shape[1]))
         
-        sample = {'input':x.astype(np.float32), 'label':y.astype(np.float32)}
+        sample = {'input':x, 'label':y}
         
         if self.transform:
             #TODO: set up for torch tranform compositions
